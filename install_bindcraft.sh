@@ -163,7 +163,7 @@ chmod +x "$install_dir/functions/DAlphaBall.gcc" || true
 # Cleanup
 #############################################
 
-conda deactivate
+source deactivate
 $pkg_manager clean -a -y
 
 t=$SECONDS
