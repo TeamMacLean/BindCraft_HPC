@@ -65,7 +65,7 @@ echo "Creating BindCraft environment"
 $pkg_manager create -y -n BindCraft python=3.10 \
   || { echo "Error: failed to create environment"; exit 1; }
 
-source "$CONDA_BASE/bin/activate" BindCraft \
+source activate BindCraft \
   || { echo "Error: could not activate BindCraft environment"; exit 1; }
 
 echo "Environment activated."
