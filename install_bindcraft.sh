@@ -85,10 +85,9 @@ jax>=0.4,<=0.6.0
 
 if [ -n "$cuda" ]; then
   CONDA_OVERRIDE_CUDA="$cuda" \
-  $pkg_manager install \
+  $pkg_manager install -c conda-forge -c nvidia --channel https://conda.graylab.jhu.edu -y \
     $COMMON_PKGS \
     'jaxlib>=0.4,<=0.6.0=*cuda*' cuda-nvcc cudnn \
-    -c conda-forge -c nvidia --channel https://conda.graylab.jhu.edu -y
     || { echo "Error: failed to install CUDA-specific packages"; exit 1; }
 else
   $pkg_manager install -y \
