@@ -90,7 +90,7 @@ if [ -n "$cuda" ]; then
     'jaxlib>=0.4,<=0.6.0=*cuda*' cuda-nvcc cudnn \
     || { echo "Error: failed to install CUDA-specific packages"; exit 1; }
 else
-  $pkg_manager install -y \
+  $pkg_manager install -c conda-forge -y \
     $COMMON_PKGS \
     jaxlib>=0.4,<=0.6.0 \
     || { echo "Error: failed to install CPU-only packages"; exit 1; }
@@ -141,11 +141,13 @@ params_file="$params_dir/alphafold_params_2022-12-06.tar"
 echo "Downloading AlphaFold2 weights..."
 mkdir -p "$params_dir"
 
-wget -O "$params_file" \
+wget --timeout=60 --tries=3 -O "$params_file" \
   "https://storage.googleapis.com/alphafold/alphafold_params_2022-12-06.tar" \
   || { echo "Weights download failed"; exit 1; }
 
-tar -xf "$params_file" -C "$params_dir"
+echo "Extracting AlphaFold2 weights..."
+tar -xf "$params_file" -C "$params_dir" \
+  || { echo "Extraction failed"; exit 1; }
 
 [ -f "$params_dir/params_model_5_ptm.npz" ] \
   || { echo "AF2 weights did not extract properly"; exit 1; }
@@ -156,8 +158,8 @@ rm "$params_file"
 # Permissions
 #############################################
 
-chmod +x "$install_dir/functions/dssp" || true
-chmod +x "$install_dir/functions/DAlphaBall.gcc" || true
+chmod +x "$install_dir/functions/dssp" 2>/dev/null || true
+chmod +x "$install_dir/functions/DAlphaBall.gcc" 2>/dev/null || true
 
 #############################################
 # Cleanup
