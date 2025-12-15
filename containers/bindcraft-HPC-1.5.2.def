@@ -1,0 +1,140 @@
+# Singularity Container for Running BindCraft
+
+BootStrap: docker
+From: ubuntu:focal
+
+%labels
+	maintainer Alison MacFadyen (MacLean Group)
+	Institute TSL
+	install-version 1.0
+	application BindCraft
+	applicationversion 1.5.2
+
+%files
+/tsl/scratch/taz23vul/Freshdesk/Ticket_1822/nvidia-cuda/cudnn-linux-x86_64-9.0.0.312_cuda12-archive.tar.xz /opt
+
+%environment
+export LANGUAGE=en_GB.UTF-8
+export LD_LIBRARY_PATH=/usr/local/lib:$LD_LIBRARY_PATH
+export PATH=/opt/software/mamba/bin:$PATH
+export PATH=/opt/software/mamba/envs/BindCraft/bin:$PATH
+
+%post
+export LANGUAGE=en_GB.UTF-8
+export LC_ALL=en_GB.UTF-8
+export LC_CTYPE=en_GB.UTF-8
+export DEBIAN_FRONTEND=noninteractive
+export CUDA_VERSION=12.0
+
+set -x
+
+apt-get -y update
+
+apt-get -y install wget git vim locales
+apt-get -y install aria2 rsync gnupg curl libgfortran5
+apt-get install --no-install-recommends -y build-essential cmake kalign tzdata
+
+buildDir=/tmp/taz23vul/fd_1822
+installDir=/opt
+
+# Create build directory
+mkdir -p ${buildDir}
+
+##########################################
+# Install Mamba (Miniforge)
+##########################################
+
+mkdir -p /opt/software
+cd /opt/software
+
+wget https://github.com/conda-forge/miniforge/releases/download/23.11.0-0/Miniforge3-Linux-x86_64.sh
+bash Miniforge3-Linux-x86_64.sh -b -p /opt/software/mamba
+rm Miniforge3-Linux-x86_64.sh
+
+export PATH=/opt/software/mamba/bin:$PATH
+
+# Initialise for bash
+/opt/software/mamba/bin/mamba init bash
+
+##########################################
+# Mirror-safe global conda/mamba config
+##########################################
+
+cat > /opt/software/mamba/.condarc << 'EOF'
+channels:
+  - https://repo.prefix.dev/conda-forge
+  - https://repo.prefix.dev/nvidia
+  - https://repo.prefix.dev/bioconda
+default_channels: []
+custom_multichannels: {}
+allow_other_channels: false
+channel_alias: https://repo.prefix.dev
+EOF
+
+# Ensure all locations receive the config
+mkdir -p /etc/conda /root
+cp /opt/software/mamba/.condarc /root/.condarc
+cp /opt/software/mamba/.condarc /etc/conda/.condarc
+
+# Test the configuration
+/opt/software/mamba/bin/mamba info
+
+cd ${buildDir}
+
+locale-gen en_GB.UTF-8
+echo "export LC_ALL=en_GB.UTF-8" >> $SINGULARITY_ENVIRONMENT
+
+## Install CUDA toolkit
+wget https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/cuda-ubuntu2004.pin
+mv cuda-ubuntu2004.pin /etc/apt/preferences.d/cuda-repository-pin-600
+apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu1804/x86_64/3bf863cc.pub
+apt-key adv --fetch-keys https://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/7fa2af80.pub
+# add-apt-repository "deb http://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64/ /"
+echo "deb [by-hash=no] http://developer.download.nvidia.com/compute/cuda/repos/ubuntu2004/x86_64 /" > /etc/apt/sources.list.d/cuda.list
+apt-get update
+apt-get -y install cuda-command-line-tools-$(echo $CUDA_VERSION | sed -e "s/\./\-/g" | cut -f1,2 -d-)
+apt-get autoremove -y
+apt-get clean
+
+## Install CUDNN 9
+cudnnPackage=cudnn-linux-x86_64-9.0.0.312_cuda12-archive.tar.xz 
+tar --strip-components=1 --exclude="*.a" -C/usr/local/ -xvf ${installDir}/${cudnnPackage}
+rm -f ${installDir}/${cudnnPackage}
+
+##########################################
+# Install BindCraft
+##########################################
+
+echo "Cloning BindCraft..."
+cd /opt/software
+git clone https://github.com/TeamMacLean/BindCraft_HPC bindcraft
+
+# Install using patched script
+cd bindcraft
+
+chmod +x install_bindcraft.sh
+
+bash -x ./install_bindcraft.sh --pkg_manager mamba --cuda "12.0" 2>&1 | tee /tmp/bindcraft_install.log
+
+# Verify installation
+echo "Verifying BindCraft installation..."
+if [ ! -d "/opt/software/mamba/envs/BindCraft" ]; then
+    echo "ERROR: BindCraft environment not found!"
+    exit 1
+fi
+
+# Verify key files exist
+if [ ! -f "/opt/software/bindcraft/params/params_model_5_ptm.npz" ]; then
+    echo "ERROR: AlphaFold weights not found!"
+    exit 1
+fi
+
+##########################################
+# Cleanup
+##########################################
+
+/opt/software/mamba/bin/mamba clean --all -y || true
+apt-get autoremove -y
+apt-get clean
+
+echo "BindCraft container build complete!"
